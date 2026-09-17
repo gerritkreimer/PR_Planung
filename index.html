@@ -42,8 +42,8 @@
 </div>
 
 <script>
-    // HIER IHRE GOOGLE APPS SCRIPT URL EINTRAGEN:
-    const API_URL = "https://script.google.com/macros/s/AKfycbz3Nqbyur8ONMLLnNkYwO4YQMI5gm3WNd4M91oD-fg_Mnh5zWgPMQXIwF1i-c4eRpf5/exec";
+    // HIER WIEDER IHRE GOOGLE APPS SCRIPT URL EINTRAGEN:
+    const API_URL = "https://script.google.com/macros/s/IHRE_LANGE_ID/exec";
     let currentUser = "";
 
     function login() {
@@ -93,10 +93,7 @@
     }
 
     function saveStatus(date, status) {
-        // UI sofort anpassen
         document.getElementById(`card-${date}`).innerHTML = `<span style="font-weight: bold;">${date}</span><span style="color: #6b7280; font-weight: bold;">Gespeichert: ${status}</span>`;
-        
-        // Im Hintergrund an Google senden
         fetch(`${API_URL}?action=save&name=${encodeURIComponent(currentUser)}&date=${date}&status=${status}`)
             .catch(err => console.error("Speicherfehler", err));
     }
@@ -106,20 +103,33 @@
             .then(response => response.json())
             .then(data => {
                 let html = "<table><tr>";
-                // Tabellenkopf
                 data[0].forEach(header => html += `<th>${header}</th>`);
                 html += "</tr>";
-                // Tabellenzeilen ab Zeile 2 (Index 1)
+                
                 for(let i = 1; i < data.length; i++) {
                     html += "<tr>";
-                    // Zeitstempel schön formatieren
+                    
+                    // Zeitstempel
                     let d = new Date(data[i][0]);
                     let datum = d.toLocaleDateString('de-DE') + " " + d.toLocaleTimeString('de-DE').substring(0,5);
                     html += `<td>${datum}</td>`;
-                    html += `<td>${data[i][1]}</td>`; // Name
-                    html += `<td>${data[i][2]}</td>`; // Termin
+                    
+                    // Name
+                    html += `<td>${data[i][1]}</td>`; 
+                    
+                    // Termin (Das Computer-Datum wieder lesbar machen)
+                    let terminRaw = data[i][2];
+                    let terminFormatiert = terminRaw;
+                    if (typeof terminRaw === 'string' && terminRaw.includes('T')) {
+                        let tDate = new Date(terminRaw);
+                        terminFormatiert = tDate.toLocaleDateString('de-DE', {day: '2-digit', month: '2-digit', year: 'numeric'});
+                    }
+                    html += `<td>${terminFormatiert}</td>`;
+                    
+                    // Status
                     let color = data[i][3] === "Kann" ? "#10b981" : "#ef4444";
-                    html += `<td style="color: ${color}; font-weight: bold;">${data[i][3]}</td>`; // Status
+                    html += `<td style="color: ${color}; font-weight: bold;">${data[i][3]}</td>`; 
+                    
                     html += "</tr>";
                 }
                 html += "</table>";
