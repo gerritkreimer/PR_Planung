@@ -9,7 +9,7 @@
         .container { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 100%; max-width: 500px; }
         h1 { font-size: 1.5rem; margin-top: 0; text-align: center; }
         input { width: 100%; padding: 12px; margin: 10px 0 20px; border: 1px solid #d1d5db; border-radius: 6px; box-sizing: border-box; font-size: 16px; }
-        button { background-color: #2563eb; color: white; border: none; padding: 12px 20px; border-radius: 6px; cursor: pointer; width: 100%; font-size: 16px; font-weight: bold; }
+        button { background-color: #2563eb; color: white; border: none; padding: 12px 20px; border-radius: 6px; cursor: pointer; width: 100%; font-size: 16px; font-weight: bold; transition: all 0.2s; }
         button:hover { background-color: #1d4ed8; }
         .date-card { border: 1px solid #e5e7eb; padding: 15px; border-radius: 8px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }
         .btn-group button { width: 48%; padding: 10px; }
@@ -17,7 +17,6 @@
         .btn-no { background-color: #ef4444; } .btn-no:hover { background-color: #dc2626; }
         .hidden { display: none; }
         
-        /* Neues Tabellen-Design für die Admin-Ansicht */
         table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 15px; }
         th, td { border: 1px solid #e5e7eb; padding: 12px; text-align: left; }
         th { background-color: #f9fafb; font-size: 14px; text-transform: uppercase; color: #6b7280; }
@@ -37,7 +36,7 @@
 
 <div class="container hidden" id="userScreen">
     <h1 id="greeting"></h1>
-    <p>Bitte geben Sie Ihre Verfügbarkeit für die kommenden Termine an:</p>
+    <p>Bitte geben Sie Ihre Verfügbarkeit für die kommenden Termine an. Sie können Ihre Auswahl jederzeit ändern:</p>
     <div id="dateList">Lade Termine...</div>
 </div>
 
@@ -47,8 +46,8 @@
 </div>
 
 <script>
-    // HIER WIEDER IHRE GOOGLE APPS SCRIPT URL EINTRAGEN:
-    const API_URL = "https://script.google.com/macros/s/AKfycbwGasM6xkqy54ZaBvy0UnQ87MhWE-aGC9n6A0LP9NmGOzVUeYxGua0ED_vA2k7YPk_N/exec";
+    // HIER DIE NEUE GOOGLE APPS SCRIPT URL EINTRAGEN:
+    const API_URL = "https://script.google.com/macros/s/IHRE_LANGE_ID/exec";
     let currentUser = "";
 
     function login() {
@@ -71,34 +70,57 @@
     }
 
     function loadDates() {
-        fetch(API_URL + "?action=getDates")
-            .then(response => response.json())
-            .then(dates => {
-                const list = document.getElementById("dateList");
-                list.innerHTML = "";
-                if(dates.length === 0) {
-                    list.innerHTML = "<p>Aktuell keine Termine geplant.</p>";
-                    return;
-                }
-                dates.forEach(date => {
-                    list.innerHTML += `
-                        <div class="date-card" id="card-${date}">
-                            <span style="font-weight: bold; font-size: 18px;">${date}</span>
-                            <div class="btn-group" style="width: 55%; display: flex; justify-content: space-between;">
-                                <button class="btn-yes" onclick="saveStatus('${date}', 'Kann')">Kann</button>
-                                <button class="btn-no" onclick="saveStatus('${date}', 'Kann nicht')">Kann nicht</button>
-                            </div>
-                        </div>
-                    `;
-                });
-            })
-            .catch(error => {
-                document.getElementById("dateList").innerHTML = "Fehler beim Laden der Termine.";
+        // Wir laden die Termine UND die bisherigen Antworten des Users gleichzeitig
+        Promise.all([
+            fetch(API_URL + "?action=getDates").then(res => res.json()),
+            fetch(API_URL + "?action=getUser&name=" + encodeURIComponent(currentUser)).then(res => res.json())
+        ])
+        .then(([dates, userVotes]) => {
+            const list = document.getElementById("dateList");
+            list.innerHTML = "";
+            if(dates.length === 0) {
+                list.innerHTML = "<p>Aktuell keine Termine geplant.</p>";
+                return;
+            }
+            dates.forEach(date => {
+                let vote = userVotes[date]; // Hat der User hier schon abgestimmt?
+                list.innerHTML += renderCard(date, vote);
             });
+        })
+        .catch(error => {
+            document.getElementById("dateList").innerHTML = "Fehler beim Laden der Termine.";
+        });
+    }
+
+    function renderCard(date, vote) {
+        let isKann = vote === 'Kann';
+        let isKannNicht = vote === 'Kann nicht';
+        
+        // Optische Hervorhebung, falls schon geklickt wurde
+        let btnYesStyle = isKann ? "background-color: #059669; box-shadow: inset 0 0 0 3px rgba(0,0,0,0.3);" : "";
+        let btnNoStyle = isKannNicht ? "background-color: #dc2626; box-shadow: inset 0 0 0 3px rgba(0,0,0,0.3);" : "";
+        let statusText = vote ? `<div style="font-size: 13px; color: #10b981; margin-top: 5px; font-weight:bold;">Ihre Wahl: ${vote}</div>` : "";
+        if (isKannNicht) statusText = `<div style="font-size: 13px; color: #ef4444; margin-top: 5px; font-weight:bold;">Ihre Wahl: ${vote}</div>`;
+
+        return `
+            <div class="date-card" id="card-${date}">
+                <div>
+                    <span style="font-weight: bold; font-size: 18px;">${date}</span>
+                    ${statusText}
+                </div>
+                <div class="btn-group" style="width: 55%; display: flex; justify-content: space-between;">
+                    <button class="btn-yes" style="${btnYesStyle}" onclick="saveStatus('${date}', 'Kann')">Kann</button>
+                    <button class="btn-no" style="${btnNoStyle}" onclick="saveStatus('${date}', 'Kann nicht')">Kann nicht</button>
+                </div>
+            </div>
+        `;
     }
 
     function saveStatus(date, status) {
-        document.getElementById(`card-${date}`).innerHTML = `<span style="font-weight: bold;">${date}</span><span style="color: #6b7280; font-weight: bold;">Gespeichert: ${status}</span>`;
+        // UI sofort aktualisieren (fühlt sich schnell an)
+        document.getElementById(`card-${date}`).outerHTML = renderCard(date, status);
+        
+        // Im Hintergrund an Google senden
         fetch(`${API_URL}?action=save&name=${encodeURIComponent(currentUser)}&date=${date}&status=${status}`)
             .catch(err => console.error("Speicherfehler", err));
     }
@@ -109,56 +131,40 @@
             .then(data => {
                 const datesMap = {};
 
-                // Die rohen Zeilen auswerten (data[0] ist die Überschrift, also ab Index 1 starten)
                 for(let i = 1; i < data.length; i++) {
                     let name = data[i][1];
                     let terminRaw = data[i][2];
                     let status = data[i][3];
 
-                    // Datum lesbar machen
                     let terminFormatiert = terminRaw;
                     if (typeof terminRaw === 'string' && terminRaw.includes('T')) {
                         let tDate = new Date(terminRaw);
                         terminFormatiert = ("0" + tDate.getDate()).slice(-2) + "." + ("0" + (tDate.getMonth() + 1)).slice(-2) + "." + tDate.getFullYear();
                     }
 
-                    // Termin im Objekt anlegen, falls noch nicht vorhanden
-                    if (!datesMap[terminFormatiert]) {
-                        datesMap[terminFormatiert] = {};
-                    }
-                    
-                    // Name und Status zuordnen (überschreibt automatisch alte Klicks derselben Person!)
+                    if (!datesMap[terminFormatiert]) datesMap[terminFormatiert] = {};
                     datesMap[terminFormatiert][name] = status;
                 }
 
-                // Tabelle aufbauen
                 let html = "<table><tr><th style='width: 120px;'>Termin</th><th>Rückmeldungen</th></tr>";
                 
-                // Für jeden Termin eine Zeile generieren
                 for (let termin in datesMap) {
                     let kannList = [];
                     let kannNichtList = [];
 
-                    // Personen auf "Kann" und "Kann nicht" aufteilen
                     for (let person in datesMap[termin]) {
-                        if (datesMap[termin][person] === "Kann") {
-                            kannList.push(person);
-                        } else {
-                            kannNichtList.push(person);
-                        }
+                        if (datesMap[termin][person] === "Kann") kannList.push(person);
+                        else kannNichtList.push(person);
                     }
 
-                    // Listen als HTML-Text formatieren
                     let kannHtml = kannList.length > 0 ? kannList.join("<br>") : "<span style='color: #9ca3af; font-style: italic;'>Niemand</span>";
                     let kannNichtHtml = kannNichtList.length > 0 ? kannNichtList.join("<br>") : "<span style='color: #9ca3af; font-style: italic;'>Niemand</span>";
 
-                    // Zeile zusammenbauen (mit ausklappbarem details-Tag für "Kann nicht")
                     html += `<tr>
                         <td style="font-weight: bold;">${termin}</td>
                         <td>
                             <div style="color: #10b981; font-weight: bold; margin-bottom: 5px;">Kann (${kannList.length}):</div>
                             <div style="margin-bottom: 15px; line-height: 1.5;">${kannHtml}</div>
-                            
                             <details>
                                 <summary style="color: #ef4444; font-weight: bold;">Kann nicht (${kannNichtList.length})</summary>
                                 <div style="margin-top: 8px; line-height: 1.5; color: #4b5563;">${kannNichtHtml}</div>
@@ -166,7 +172,6 @@
                         </td>
                     </tr>`;
                 }
-
                 html += "</table>";
                 document.getElementById("adminData").innerHTML = html;
             })
