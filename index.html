@@ -16,9 +16,14 @@
         .btn-yes { background-color: #10b981; } .btn-yes:hover { background-color: #059669; }
         .btn-no { background-color: #ef4444; } .btn-no:hover { background-color: #dc2626; }
         .hidden { display: none; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px; }
-        th, td { border: 1px solid #e5e7eb; padding: 8px; text-align: left; }
-        th { background-color: #f9fafb; }
+        
+        /* Neues Tabellen-Design für die Admin-Ansicht */
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 15px; }
+        th, td { border: 1px solid #e5e7eb; padding: 12px; text-align: left; }
+        th { background-color: #f9fafb; font-size: 14px; text-transform: uppercase; color: #6b7280; }
+        td { vertical-align: top; }
+        details { cursor: pointer; }
+        summary { outline: none; margin-bottom: 5px; }
     </style>
 </head>
 <body>
@@ -36,14 +41,14 @@
     <div id="dateList">Lade Termine...</div>
 </div>
 
-<div class="container hidden" id="adminScreen" style="max-width: 800px;">
+<div class="container hidden" id="adminScreen" style="max-width: 600px;">
     <h1>Admin Übersicht</h1>
     <div id="adminData">Lade Daten...</div>
 </div>
 
 <script>
     // HIER WIEDER IHRE GOOGLE APPS SCRIPT URL EINTRAGEN:
-    const API_URL = "https://script.google.com/macros/s/AKfycbz3Nqbyur8ONMLLnNkYwO4YQMI5gm3WNd4M91oD-fg_Mnh5zWgPMQXIwF1i-c4eRpf5/exec";
+    const API_URL = "https://script.google.com/macros/s/IHRE_LANGE_ID/exec";
     let currentUser = "";
 
     function login() {
@@ -102,38 +107,71 @@
         fetch(API_URL + "?action=getAdmin")
             .then(response => response.json())
             .then(data => {
-                let html = "<table><tr>";
-                data[0].forEach(header => html += `<th>${header}</th>`);
-                html += "</tr>";
-                
+                const datesMap = {};
+
+                // Die rohen Zeilen auswerten (data[0] ist die Überschrift, also ab Index 1 starten)
                 for(let i = 1; i < data.length; i++) {
-                    html += "<tr>";
-                    
-                    // Zeitstempel
-                    let d = new Date(data[i][0]);
-                    let datum = d.toLocaleDateString('de-DE') + " " + d.toLocaleTimeString('de-DE').substring(0,5);
-                    html += `<td>${datum}</td>`;
-                    
-                    // Name
-                    html += `<td>${data[i][1]}</td>`; 
-                    
-                    // Termin (Das Computer-Datum wieder lesbar machen)
+                    let name = data[i][1];
                     let terminRaw = data[i][2];
+                    let status = data[i][3];
+
+                    // Datum lesbar machen
                     let terminFormatiert = terminRaw;
                     if (typeof terminRaw === 'string' && terminRaw.includes('T')) {
                         let tDate = new Date(terminRaw);
-                        terminFormatiert = tDate.toLocaleDateString('de-DE', {day: '2-digit', month: '2-digit', year: 'numeric'});
+                        terminFormatiert = ("0" + tDate.getDate()).slice(-2) + "." + ("0" + (tDate.getMonth() + 1)).slice(-2) + "." + tDate.getFullYear();
                     }
-                    html += `<td>${terminFormatiert}</td>`;
+
+                    // Termin im Objekt anlegen, falls noch nicht vorhanden
+                    if (!datesMap[terminFormatiert]) {
+                        datesMap[terminFormatiert] = {};
+                    }
                     
-                    // Status
-                    let color = data[i][3] === "Kann" ? "#10b981" : "#ef4444";
-                    html += `<td style="color: ${color}; font-weight: bold;">${data[i][3]}</td>`; 
-                    
-                    html += "</tr>";
+                    // Name und Status zuordnen (überschreibt automatisch alte Klicks derselben Person!)
+                    datesMap[terminFormatiert][name] = status;
                 }
+
+                // Tabelle aufbauen
+                let html = "<table><tr><th style='width: 120px;'>Termin</th><th>Rückmeldungen</th></tr>";
+                
+                // Für jeden Termin eine Zeile generieren
+                for (let termin in datesMap) {
+                    let kannList = [];
+                    let kannNichtList = [];
+
+                    // Personen auf "Kann" und "Kann nicht" aufteilen
+                    for (let person in datesMap[termin]) {
+                        if (datesMap[termin][person] === "Kann") {
+                            kannList.push(person);
+                        } else {
+                            kannNichtList.push(person);
+                        }
+                    }
+
+                    // Listen als HTML-Text formatieren
+                    let kannHtml = kannList.length > 0 ? kannList.join("<br>") : "<span style='color: #9ca3af; font-style: italic;'>Niemand</span>";
+                    let kannNichtHtml = kannNichtList.length > 0 ? kannNichtList.join("<br>") : "<span style='color: #9ca3af; font-style: italic;'>Niemand</span>";
+
+                    // Zeile zusammenbauen (mit ausklappbarem details-Tag für "Kann nicht")
+                    html += `<tr>
+                        <td style="font-weight: bold;">${termin}</td>
+                        <td>
+                            <div style="color: #10b981; font-weight: bold; margin-bottom: 5px;">Kann (${kannList.length}):</div>
+                            <div style="margin-bottom: 15px; line-height: 1.5;">${kannHtml}</div>
+                            
+                            <details>
+                                <summary style="color: #ef4444; font-weight: bold;">Kann nicht (${kannNichtList.length})</summary>
+                                <div style="margin-top: 8px; line-height: 1.5; color: #4b5563;">${kannNichtHtml}</div>
+                            </details>
+                        </td>
+                    </tr>`;
+                }
+
                 html += "</table>";
                 document.getElementById("adminData").innerHTML = html;
+            })
+            .catch(error => {
+                document.getElementById("adminData").innerHTML = "Fehler beim Abrufen der Daten.";
             });
     }
 </script>
