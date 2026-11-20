@@ -42,7 +42,7 @@
         .add-date-box { display: flex; gap: 10px; margin-bottom: 15px; }
         .add-date-box input { margin: 0; }
         .add-date-box button { width: auto; white-space: nowrap; }
-        .status-info { font-size: 13px; padding: 8px 12px; border-radius: 6px; background: #eff6ff; color: #1e40af; margin-bottom: 12px; }
+        .status-info { font-size: 13px; padding: 10px 12px; border-radius: 6px; background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; margin-bottom: 12px; word-break: break-word; }
     </style>
 </head>
 <body>
@@ -74,7 +74,7 @@
         <input type="date" id="newDateInput">
         <button onclick="addDate()">+ Hinzufügen</button>
     </div>
-    <div id="adminStatusMsg" class="status-info hidden"></div>
+    <div id="adminStatusMsg" class="status-info">Bereit.</div>
     <div id="adminDateList" style="margin-bottom: 20px;">Lade Termine...</div>
 
     <h2>Rückmeldungen</h2>
@@ -90,7 +90,8 @@
         box.classList.remove("hidden");
         box.style.background = isError ? "#fef2f2" : "#eff6ff";
         box.style.color = isError ? "#991b1b" : "#1e40af";
-        box.innerText = msg;
+        box.style.borderColor = isError ? "#fecaca" : "#bfdbfe";
+        box.textContent = String(msg);
     }
 
     function checkAdminInput() {
@@ -107,6 +108,7 @@
     function login() {
         currentUser = document.getElementById("userName").value.trim();
         if (currentUser === "") {
+            showAdminStatus("Bitte geben Sie einen Namen ein.", true);
             alert("Bitte geben Sie einen Namen ein.");
             return;
         }
@@ -140,8 +142,12 @@
         const listDiv = document.getElementById("adminDateList");
         listDiv.innerHTML = "Lade Termine...";
         fetch(API_URL + "?action=getDates")
-            .then(res => res.json())
-            .then(dates => {
+            .then(res => {
+                if (!res.ok) throw new Error("HTTP " + res.status);
+                return res.text();
+            })
+            .then(txt => {
+                const dates = JSON.parse(txt);
                 if (!Array.isArray(dates) || dates.length === 0) {
                     listDiv.innerHTML = "<p style='color:#6b7280; font-style:italic;'>Keine Termine vorhanden.</p>";
                     return;
@@ -160,26 +166,38 @@
                 });
                 listDiv.innerHTML = html;
             })
-            .catch(() => listDiv.innerHTML = "Fehler beim Laden der Termine.");
+            .catch(err => {
+                console.error("loadAdminDates error:", err);
+                listDiv.innerHTML = "Fehler beim Laden der Termine.";
+                showAdminStatus("Fehler beim Laden der Termine: " + (err && err.message ? err.message : err), true);
+            });
     }
 
     function addDate() {
         const rawDate = document.getElementById("newDateInput").value;
         if (!rawDate) {
-            alert("Bitte wählen Sie ein Datum aus.");
+            showAdminStatus("Bitte wählen Sie ein Datum aus.", true);
             return;
         }
         const formattedDate = formatToGermanDate(rawDate);
         document.getElementById("adminDateList").innerHTML = "Speichere...";
         
         fetch(`${API_URL}?action=addDate&date=${encodeURIComponent(formattedDate)}`)
-            .then(res => res.json())
-            .then(data => {
+            .then(res => {
+                if (!res.ok) throw new Error("HTTP " + res.status);
+                return res.text();
+            })
+            .then(txt => {
+                const data = JSON.parse(txt);
                 document.getElementById("newDateInput").value = "";
                 showAdminStatus(`Termin ${data.date || formattedDate} hinzugefügt.`);
                 loadAdminDates();
             })
-            .catch(() => showAdminStatus("Fehler beim Hinzufügen.", true));
+            .catch(err => {
+                console.error("addDate error:", err);
+                showAdminStatus("Fehler beim Hinzufügen: " + (err && err.message ? err.message : err), true);
+                loadAdminDates();
+            });
     }
 
     function editDate(oldDate) {
@@ -188,22 +206,40 @@
 
         document.getElementById("adminDateList").innerHTML = "Aktualisiere...";
         fetch(`${API_URL}?action=editDate&oldDate=${encodeURIComponent(oldDate)}&newDate=${encodeURIComponent(newDate.trim())}`)
-            .then(res => res.json())
+            .then(res => {
+                if (!res.ok) throw new Error("HTTP " + res.status);
+                return res.text();
+            })
             .then(() => {
                 showAdminStatus(`Termin von ${oldDate} auf ${newDate.trim()} geändert.`);
                 loadAdminDates();
                 loadAdminData();
             })
-            .catch(() => showAdminStatus("Fehler beim Ändern.", true));
+            .catch(err => {
+                console.error("editDate error:", err);
+                showAdminStatus("Fehler beim Ändern: " + (err && err.message ? err.message : err), true);
+                loadAdminDates();
+            });
     }
 
     function deleteDate(date) {
-        if (!confirm(`Möchten Sie den Termin ${date} und alle zugehörigen Rückmeldungen wirklich löschen?`)) return;
-
+        showAdminStatus(`Lösche Termin ${date}...`);
         document.getElementById("adminDateList").innerHTML = "Lösche...";
+
         fetch(`${API_URL}?action=deleteDate&date=${encodeURIComponent(date)}`)
-            .then(res => res.json())
-            .then(data => {
+            .then(res => {
+                if (!res.ok) throw new Error("HTTP " + res.status);
+                return res.text();
+            })
+            .then(txt => {
+                let data;
+                try {
+                    data = JSON.parse(txt);
+                } catch (e) {
+                    showAdminStatus("Ungültige Antwort vom Server: " + txt.slice(0, 180), true);
+                    loadAdminDates();
+                    return;
+                }
                 if (data.error) {
                     showAdminStatus("Skriptfehler: " + data.error, true);
                 } else {
@@ -214,7 +250,11 @@
                 loadAdminDates();
                 loadAdminData();
             })
-            .catch(err => showAdminStatus("Fehler beim Löschen: " + err.message, true));
+            .catch(err => {
+                console.error("deleteDate error:", err);
+                showAdminStatus("Fehler beim Löschen: " + (err && err.message ? err.message : err), true);
+                loadAdminDates();
+            });
     }
 
     function loadDates() {
