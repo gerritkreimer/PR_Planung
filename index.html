@@ -85,6 +85,12 @@
     const API_URL = "https://script.google.com/macros/s/AKfycbxzDUutr79v72yJJa8_3PTlE6CZ4QGnQ4roMUYAsqt0UytQaA9hIlBK2u4WymzEDawH/exec";
     let currentUser = "";
 
+    function apiFetch(paramsStr) {
+        const sep = paramsStr.includes("?") ? "&" : "?";
+        const url = `${API_URL}${paramsStr}${sep}_t=${Date.now()}`;
+        return fetch(url, { cache: "no-store" });
+    }
+
     function showAdminStatus(msg, isError = false) {
         const box = document.getElementById("adminStatusMsg");
         box.classList.remove("hidden");
@@ -141,7 +147,7 @@
     function loadAdminDates() {
         const listDiv = document.getElementById("adminDateList");
         listDiv.innerHTML = "Lade Termine...";
-        fetch(API_URL + "?action=getDates")
+        apiFetch("?action=getDates")
             .then(res => {
                 if (!res.ok) throw new Error("HTTP " + res.status);
                 return res.text();
@@ -182,7 +188,7 @@
         const formattedDate = formatToGermanDate(rawDate);
         document.getElementById("adminDateList").innerHTML = "Speichere...";
         
-        fetch(`${API_URL}?action=addDate&date=${encodeURIComponent(formattedDate)}`)
+        apiFetch(`?action=addDate&date=${encodeURIComponent(formattedDate)}`)
             .then(res => {
                 if (!res.ok) throw new Error("HTTP " + res.status);
                 return res.text();
@@ -205,7 +211,7 @@
         if (!newDate || newDate.trim() === "" || newDate.trim() === oldDate) return;
 
         document.getElementById("adminDateList").innerHTML = "Aktualisiere...";
-        fetch(`${API_URL}?action=editDate&oldDate=${encodeURIComponent(oldDate)}&newDate=${encodeURIComponent(newDate.trim())}`)
+        apiFetch(`?action=editDate&oldDate=${encodeURIComponent(oldDate)}&newDate=${encodeURIComponent(newDate.trim())}`)
             .then(res => {
                 if (!res.ok) throw new Error("HTTP " + res.status);
                 return res.text();
@@ -226,7 +232,7 @@
         showAdminStatus(`Lösche Termin ${date}...`);
         document.getElementById("adminDateList").innerHTML = "Lösche...";
 
-        fetch(`${API_URL}?action=deleteDate&date=${encodeURIComponent(date)}`)
+        apiFetch(`?action=deleteDate&date=${encodeURIComponent(date)}`)
             .then(res => {
                 if (!res.ok) throw new Error("HTTP " + res.status);
                 return res.text();
@@ -259,8 +265,8 @@
 
     function loadDates() {
         Promise.all([
-            fetch(API_URL + "?action=getDates").then(res => res.json()),
-            fetch(API_URL + "?action=getUser&name=" + encodeURIComponent(currentUser)).then(res => res.json())
+            apiFetch("?action=getDates").then(res => res.json()),
+            apiFetch("?action=getUser&name=" + encodeURIComponent(currentUser)).then(res => res.json())
         ])
         .then(([dates, userVotes]) => {
             const list = document.getElementById("dateList");
@@ -304,12 +310,12 @@
 
     function saveStatus(date, status) {
         document.getElementById(`card-${date}`).outerHTML = renderCard(date, status);
-        fetch(`${API_URL}?action=save&name=${encodeURIComponent(currentUser)}&date=${encodeURIComponent(date)}&status=${encodeURIComponent(status)}`)
+        apiFetch(`?action=save&name=${encodeURIComponent(currentUser)}&date=${encodeURIComponent(date)}&status=${encodeURIComponent(status)}`)
             .catch(err => console.error("Speicherfehler", err));
     }
 
     function loadAdminData() {
-        fetch(API_URL + "?action=getAdmin")
+        apiFetch("?action=getAdmin")
             .then(response => response.json())
             .then(data => {
                 const datesMap = {};
