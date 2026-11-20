@@ -82,7 +82,7 @@
 </div>
 
 <script>
-    const API_URL = "https://script.google.com/macros/s/AKfycbxzDUutr79v72yJJa8_3PTlE6CZ4QGnQ4roMUYAsqt0UytQaA9hIlBK2u4WymzEDawH/exec";
+    const API_URL = "https://script.google.com/macros/s/AKfycbwvaF0vydA8Jc8FbOdBUnFzyLqFk2FH3dOiBqkNpzzTqgsli_YZILwr6uVtt9TGN0bq/exec";
     let currentUser = "";
 
     function apiFetch(paramsStr) {
@@ -232,17 +232,23 @@
         showAdminStatus(`Lösche Termin ${date}...`);
         document.getElementById("adminDateList").innerHTML = "Lösche...";
 
+        let httpStatus = 0;
         apiFetch(`?action=deleteDate&date=${encodeURIComponent(date)}`)
             .then(res => {
-                if (!res.ok) throw new Error("HTTP " + res.status);
-                return res.text();
+                httpStatus = res.status;
+                return res.text().then(txt => ({ ok: res.ok, status: res.status, txt }));
             })
-            .then(txt => {
+            .then(({ ok, status, txt }) => {
+                if (!ok) {
+                    showAdminStatus(`HTTP ${status}: ${txt.slice(0, 180)}`, true);
+                    loadAdminDates();
+                    return;
+                }
                 let data;
                 try {
                     data = JSON.parse(txt);
                 } catch (e) {
-                    showAdminStatus("Ungültige Antwort vom Server: " + txt.slice(0, 180), true);
+                    showAdminStatus(`Ungültige Antwort (HTTP ${status}): "${txt.slice(0, 180)}"`, true);
                     loadAdminDates();
                     return;
                 }
@@ -258,7 +264,7 @@
             })
             .catch(err => {
                 console.error("deleteDate error:", err);
-                showAdminStatus("Fehler beim Löschen: " + (err && err.message ? err.message : err), true);
+                showAdminStatus(`Fehler beim Löschen (HTTP ${httpStatus}): ` + (err && err.message ? err.message : err), true);
                 loadAdminDates();
             });
     }
