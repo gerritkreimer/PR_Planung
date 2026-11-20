@@ -2,12 +2,15 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
+    <!-- Verhindert das automatische Heranzoomen beim Tippen auf iPhones -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>PR Planung</title>
 
+    <!-- Web App Konfiguration (Homescreen-Icon & Name) -->
     <meta name="theme-color" content="#2563eb">
     <link rel="manifest" href="manifest.json">
     
+    <!-- Spezielle Einstellungen für Apple iOS (iPhone/iPad) -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="PR-Termine">
@@ -39,6 +42,7 @@
         .add-date-box { display: flex; gap: 10px; margin-bottom: 15px; }
         .add-date-box input { margin: 0; }
         .add-date-box button { width: auto; white-space: nowrap; }
+        .status-info { font-size: 13px; padding: 8px 12px; border-radius: 6px; background: #eff6ff; color: #1e40af; margin-bottom: 12px; }
     </style>
 </head>
 <body>
@@ -70,6 +74,7 @@
         <input type="date" id="newDateInput">
         <button onclick="addDate()">+ Hinzufügen</button>
     </div>
+    <div id="adminStatusMsg" class="status-info hidden"></div>
     <div id="adminDateList" style="margin-bottom: 20px;">Lade Termine...</div>
 
     <h2>Rückmeldungen</h2>
@@ -80,7 +85,14 @@
     const API_URL = "https://script.google.com/macros/s/AKfycbxzDUutr79v72yJJa8_3PTlE6CZ4QGnQ4roMUYAsqt0UytQaA9hIlBK2u4WymzEDawH/exec";
     let currentUser = "";
 
-    // Blendet das Passwortfeld ein, sobald "admin" eingetippt wird
+    function showAdminStatus(msg, isError = false) {
+        const box = document.getElementById("adminStatusMsg");
+        box.classList.remove("hidden");
+        box.style.background = isError ? "#fef2f2" : "#eff6ff";
+        box.style.color = isError ? "#991b1b" : "#1e40af";
+        box.innerText = msg;
+    }
+
     function checkAdminInput() {
         const val = document.getElementById("userName").value.trim().toLowerCase();
         const pwBox = document.getElementById("adminPasswordBox");
@@ -117,7 +129,6 @@
         }
     }
 
-    // Wandelt YYYY-MM-DD (vom Date-Picker) in DD.MM.YYYY um
     function formatToGermanDate(isoDate) {
         if (!isoDate) return "";
         const parts = isoDate.split("-");
@@ -125,14 +136,13 @@
         return `${parts[2]}.${parts[1]}.${parts[0]}`;
     }
 
-    // --- ADMIN: TERMINE VERWALTEN ---
     function loadAdminDates() {
         const listDiv = document.getElementById("adminDateList");
         listDiv.innerHTML = "Lade Termine...";
         fetch(API_URL + "?action=getDates")
             .then(res => res.json())
             .then(dates => {
-                if (dates.length === 0) {
+                if (!Array.isArray(dates) || dates.length === 0) {
                     listDiv.innerHTML = "<p style='color:#6b7280; font-style:italic;'>Keine Termine vorhanden.</p>";
                     return;
                 }
@@ -163,11 +173,13 @@
         document.getElementById("adminDateList").innerHTML = "Speichere...";
         
         fetch(`${API_URL}?action=addDate&date=${encodeURIComponent(formattedDate)}`)
-            .then(() => {
+            .then(res => res.json())
+            .then(data => {
                 document.getElementById("newDateInput").value = "";
+                showAdminStatus(`Termin ${data.date || formattedDate} hinzugefügt.`);
                 loadAdminDates();
             })
-            .catch(() => alert("Fehler beim Hinzufügen."));
+            .catch(() => showAdminStatus("Fehler beim Hinzufügen.", true));
     }
 
     function editDate(oldDate) {
@@ -176,25 +188,35 @@
 
         document.getElementById("adminDateList").innerHTML = "Aktualisiere...";
         fetch(`${API_URL}?action=editDate&oldDate=${encodeURIComponent(oldDate)}&newDate=${encodeURIComponent(newDate.trim())}`)
+            .then(res => res.json())
             .then(() => {
+                showAdminStatus(`Termin von ${oldDate} auf ${newDate.trim()} geändert.`);
                 loadAdminDates();
-                loadAdminData(); // Tabelle unten ebenfalls aktualisieren
+                loadAdminData();
             })
-            .catch(() => alert("Fehler beim Ändern."));
+            .catch(() => showAdminStatus("Fehler beim Ändern.", true));
     }
 
     function deleteDate(date) {
-        if (!confirm(`Möchten Sie den Termin ${date} wirklich löschen?`)) return;
+        if (!confirm(`Möchten Sie den Termin ${date} und alle zugehörigen Rückmeldungen wirklich löschen?`)) return;
 
         document.getElementById("adminDateList").innerHTML = "Lösche...";
         fetch(`${API_URL}?action=deleteDate&date=${encodeURIComponent(date)}`)
-            .then(() => {
+            .then(res => res.json())
+            .then(data => {
+                if (data.error) {
+                    showAdminStatus("Skriptfehler: " + data.error, true);
+                } else {
+                    showAdminStatus(
+                        `Gelöscht (${data.delDate}): ${data.deletedTermine} Termin(e) in "${data.sheetTermineName}", ${data.deletedAntworten} Rückmeldung(en) in "${data.sheetAntwortenName}".`
+                    );
+                }
                 loadAdminDates();
+                loadAdminData();
             })
-            .catch(() => alert("Fehler beim Löschen."));
+            .catch(err => showAdminStatus("Fehler beim Löschen: " + err.message, true));
     }
 
-    // --- USER: TERMINE LADEN & SPEICHERN ---
     function loadDates() {
         Promise.all([
             fetch(API_URL + "?action=getDates").then(res => res.json()),
@@ -203,7 +225,7 @@
         .then(([dates, userVotes]) => {
             const list = document.getElementById("dateList");
             list.innerHTML = "";
-            if(dates.length === 0) {
+            if(!Array.isArray(dates) || dates.length === 0) {
                 list.innerHTML = "<p>Aktuell keine Termine geplant.</p>";
                 return;
             }
@@ -242,11 +264,10 @@
 
     function saveStatus(date, status) {
         document.getElementById(`card-${date}`).outerHTML = renderCard(date, status);
-        fetch(`${API_URL}?action=save&name=${encodeURIComponent(currentUser)}&date=${date}&status=${status}`)
+        fetch(`${API_URL}?action=save&name=${encodeURIComponent(currentUser)}&date=${encodeURIComponent(date)}&status=${encodeURIComponent(status)}`)
             .catch(err => console.error("Speicherfehler", err));
     }
 
-    // --- ADMIN: RÜCKMELDUNGEN LADEN ---
     function loadAdminData() {
         fetch(API_URL + "?action=getAdmin")
             .then(response => response.json())
