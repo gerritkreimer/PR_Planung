@@ -2,15 +2,12 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <!-- Verhindert das automatische Heranzoomen beim Tippen auf iPhones -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>PR Planung</title>
 
-    <!-- Web App Konfiguration (Homescreen-Icon & Name) -->
     <meta name="theme-color" content="#2563eb">
     <link rel="manifest" href="manifest.json">
     
-    <!-- Spezielle Einstellungen für Apple iOS (iPhone/iPad) -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="PR-Termine">
@@ -20,6 +17,7 @@
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f3f4f6; color: #1f2937; margin: 0; padding: 20px; display: flex; justify-content: center; }
         .container { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 100%; max-width: 500px; }
         h1 { font-size: 1.5rem; margin-top: 0; text-align: center; }
+        h2 { font-size: 1.2rem; margin-top: 25px; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px; }
         input { width: 100%; padding: 12px; margin: 10px 0 20px; border: 1px solid #d1d5db; border-radius: 6px; box-sizing: border-box; font-size: 16px; }
         button { background-color: #2563eb; color: white; border: none; padding: 12px 20px; border-radius: 6px; cursor: pointer; width: 100%; font-size: 16px; font-weight: bold; transition: all 0.2s; }
         button:hover { background-color: #1d4ed8; }
@@ -27,6 +25,8 @@
         .btn-group button { width: 48%; padding: 10px; }
         .btn-yes { background-color: #10b981; } .btn-yes:hover { background-color: #059669; }
         .btn-no { background-color: #ef4444; } .btn-no:hover { background-color: #dc2626; }
+        .btn-small { width: auto; padding: 6px 12px; font-size: 14px; margin-left: 5px; }
+        .btn-edit { background-color: #f59e0b; } .btn-edit:hover { background-color: #d97706; }
         .hidden { display: none; }
         
         table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 15px; }
@@ -35,6 +35,10 @@
         td { vertical-align: top; }
         details { cursor: pointer; }
         summary { outline: none; margin-bottom: 5px; }
+        .admin-date-row { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #e5e7eb; }
+        .add-date-box { display: flex; gap: 10px; margin-bottom: 15px; }
+        .add-date-box input { margin: 0; }
+        .add-date-box button { width: auto; white-space: nowrap; }
     </style>
 </head>
 <body>
@@ -42,7 +46,13 @@
 <div class="container" id="loginScreen">
     <h1>Anmeldung zur PR-Sitzung</h1>
     <p style="text-align: center; color: #6b7280; font-size: 14px;">Bitte Vor- und Nachnamen eingeben</p>
-    <input type="text" id="userName" placeholder="z.B. Max Mustermann">
+    <input type="text" id="userName" placeholder="z.B. Max Mustermann" oninput="checkAdminInput()">
+    
+    <!-- Passwortfeld erscheint nur bei Eingabe von "admin" -->
+    <div id="adminPasswordBox" class="hidden">
+        <input type="password" id="adminPassword" placeholder="Admin-Passwort eingeben">
+    </div>
+    
     <button onclick="login()">Weiter</button>
 </div>
 
@@ -52,15 +62,35 @@
     <div id="dateList">Lade Termine...</div>
 </div>
 
-<div class="container hidden" id="adminScreen" style="max-width: 600px;">
-    <h1>Admin Übersicht</h1>
+<div class="container hidden" id="adminScreen" style="max-width: 650px;">
+    <h1>Admin Bereich</h1>
+    
+    <h2>Termine verwalten</h2>
+    <div class="add-date-box">
+        <input type="date" id="newDateInput">
+        <button onclick="addDate()">+ Hinzufügen</button>
+    </div>
+    <div id="adminDateList" style="margin-bottom: 20px;">Lade Termine...</div>
+
+    <h2>Rückmeldungen</h2>
     <div id="adminData">Lade Daten...</div>
 </div>
 
 <script>
-    // HIER WIEDER IHRE GOOGLE APPS SCRIPT URL EINTRAGEN:
     const API_URL = "https://script.google.com/macros/s/AKfycbxzDUutr79v72yJJa8_3PTlE6CZ4QGnQ4roMUYAsqt0UytQaA9hIlBK2u4WymzEDawH/exec";
     let currentUser = "";
+
+    // Blendet das Passwortfeld ein, sobald "admin" eingetippt wird
+    function checkAdminInput() {
+        const val = document.getElementById("userName").value.trim().toLowerCase();
+        const pwBox = document.getElementById("adminPasswordBox");
+        if (val === "admin") {
+            pwBox.classList.remove("hidden");
+        } else {
+            pwBox.classList.add("hidden");
+            document.getElementById("adminPassword").value = "";
+        }
+    }
 
     function login() {
         currentUser = document.getElementById("userName").value.trim();
@@ -69,18 +99,102 @@
             return;
         }
         
-        document.getElementById("loginScreen").classList.add("hidden");
-        
         if (currentUser.toLowerCase() === "admin") {
+            const pw = document.getElementById("adminPassword").value;
+            if (pw !== "admin") {
+                alert("Falsches Admin-Passwort!");
+                return;
+            }
+            document.getElementById("loginScreen").classList.add("hidden");
             document.getElementById("adminScreen").classList.remove("hidden");
+            loadAdminDates();
             loadAdminData();
         } else {
+            document.getElementById("loginScreen").classList.add("hidden");
             document.getElementById("userScreen").classList.remove("hidden");
             document.getElementById("greeting").innerText = "Hallo, " + currentUser;
             loadDates();
         }
     }
 
+    // Wandelt YYYY-MM-DD (vom Date-Picker) in DD.MM.YYYY um
+    function formatToGermanDate(isoDate) {
+        if (!isoDate) return "";
+        const parts = isoDate.split("-");
+        if (parts.length !== 3) return isoDate;
+        return `${parts[2]}.${parts[1]}.${parts[0]}`;
+    }
+
+    // --- ADMIN: TERMINE VERWALTEN ---
+    function loadAdminDates() {
+        const listDiv = document.getElementById("adminDateList");
+        listDiv.innerHTML = "Lade Termine...";
+        fetch(API_URL + "?action=getDates")
+            .then(res => res.json())
+            .then(dates => {
+                if (dates.length === 0) {
+                    listDiv.innerHTML = "<p style='color:#6b7280; font-style:italic;'>Keine Termine vorhanden.</p>";
+                    return;
+                }
+                let html = "";
+                dates.forEach(date => {
+                    html += `
+                        <div class="admin-date-row">
+                            <span style="font-weight: bold;">${date}</span>
+                            <div>
+                                <button class="btn-small btn-edit" onclick="editDate('${date}')">Ändern</button>
+                                <button class="btn-small btn-no" onclick="deleteDate('${date}')">Löschen</button>
+                            </div>
+                        </div>
+                    `;
+                });
+                listDiv.innerHTML = html;
+            })
+            .catch(() => listDiv.innerHTML = "Fehler beim Laden der Termine.");
+    }
+
+    function addDate() {
+        const rawDate = document.getElementById("newDateInput").value;
+        if (!rawDate) {
+            alert("Bitte wählen Sie ein Datum aus.");
+            return;
+        }
+        const formattedDate = formatToGermanDate(rawDate);
+        document.getElementById("adminDateList").innerHTML = "Speichere...";
+        
+        fetch(`${API_URL}?action=addDate&date=${encodeURIComponent(formattedDate)}`)
+            .then(() => {
+                document.getElementById("newDateInput").value = "";
+                loadAdminDates();
+            })
+            .catch(() => alert("Fehler beim Hinzufügen."));
+    }
+
+    function editDate(oldDate) {
+        const newDate = prompt("Neues Datum eingeben (Format TT.MM.JJJJ):", oldDate);
+        if (!newDate || newDate.trim() === "" || newDate.trim() === oldDate) return;
+
+        document.getElementById("adminDateList").innerHTML = "Aktualisiere...";
+        fetch(`${API_URL}?action=editDate&oldDate=${encodeURIComponent(oldDate)}&newDate=${encodeURIComponent(newDate.trim())}`)
+            .then(() => {
+                loadAdminDates();
+                loadAdminData(); // Tabelle unten ebenfalls aktualisieren
+            })
+            .catch(() => alert("Fehler beim Ändern."));
+    }
+
+    function deleteDate(date) {
+        if (!confirm(`Möchten Sie den Termin ${date} wirklich löschen?`)) return;
+
+        document.getElementById("adminDateList").innerHTML = "Lösche...";
+        fetch(`${API_URL}?action=deleteDate&date=${encodeURIComponent(date)}`)
+            .then(() => {
+                loadAdminDates();
+            })
+            .catch(() => alert("Fehler beim Löschen."));
+    }
+
+    // --- USER: TERMINE LADEN & SPEICHERN ---
     function loadDates() {
         Promise.all([
             fetch(API_URL + "?action=getDates").then(res => res.json()),
@@ -132,6 +246,7 @@
             .catch(err => console.error("Speicherfehler", err));
     }
 
+    // --- ADMIN: RÜCKMELDUNGEN LADEN ---
     function loadAdminData() {
         fetch(API_URL + "?action=getAdmin")
             .then(response => response.json())
