@@ -144,6 +144,24 @@
         return `${parts[2]}.${parts[1]}.${parts[0]}`;
     }
 
+    // Wandelt TT.MM.JJJJ in einen Zeitstempel zum chronologischen Sortieren um
+    function parseGermanDateToTimestamp(dateStr) {
+        if (!dateStr) return Number.MAX_SAFE_INTEGER;
+        const match = String(dateStr).trim().match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+        if (match) {
+            const day = parseInt(match[1], 10);
+            const month = parseInt(match[2], 10) - 1;
+            const year = parseInt(match[3], 10);
+            return new Date(year, month, day).getTime();
+        }
+        const fallback = new Date(dateStr).getTime();
+        return isNaN(fallback) ? Number.MAX_SAFE_INTEGER : fallback;
+    }
+
+    function sortGermanDates(dates) {
+        return [...dates].sort((a, b) => parseGermanDateToTimestamp(a) - parseGermanDateToTimestamp(b));
+    }
+
     function loadAdminDates() {
         const listDiv = document.getElementById("adminDateList");
         listDiv.innerHTML = "Lade Termine...";
@@ -153,11 +171,12 @@
                 return res.text();
             })
             .then(txt => {
-                const dates = JSON.parse(txt);
-                if (!Array.isArray(dates) || dates.length === 0) {
+                const rawDates = JSON.parse(txt);
+                if (!Array.isArray(rawDates) || rawDates.length === 0) {
                     listDiv.innerHTML = "<p style='color:#6b7280; font-style:italic;'>Keine Termine vorhanden.</p>";
                     return;
                 }
+                const dates = sortGermanDates(rawDates);
                 let html = "";
                 dates.forEach(date => {
                     html += `
@@ -274,13 +293,14 @@
             apiFetch("?action=getDates").then(res => res.json()),
             apiFetch("?action=getUser&name=" + encodeURIComponent(currentUser)).then(res => res.json())
         ])
-        .then(([dates, userVotes]) => {
+        .then(([rawDates, userVotes]) => {
             const list = document.getElementById("dateList");
             list.innerHTML = "";
-            if(!Array.isArray(dates) || dates.length === 0) {
+            if(!Array.isArray(rawDates) || rawDates.length === 0) {
                 list.innerHTML = "<p>Aktuell keine Termine geplant.</p>";
                 return;
             }
+            const dates = sortGermanDates(rawDates);
             dates.forEach(date => {
                 let vote = userVotes[date]; 
                 list.innerHTML += renderCard(date, vote);
@@ -341,9 +361,10 @@
                     datesMap[terminFormatiert][name] = status;
                 }
 
+                const sortedTermine = sortGermanDates(Object.keys(datesMap));
                 let html = "<table><tr><th style='width: 120px;'>Termin</th><th>Rückmeldungen</th></tr>";
                 
-                for (let termin in datesMap) {
+                for (let termin of sortedTermine) {
                     let kannList = [];
                     let kannNichtList = [];
 
